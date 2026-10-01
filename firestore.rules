@@ -1,0 +1,35 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isAdmin() {
+      return request.auth != null
+        && exists(/databases/$(database)/documents/admins/$(request.auth.uid));
+    }
+
+    // Produk: publik hanya yang aktif; admin bisa semua
+    match /products/{id} {
+      allow read: if resource.data.active == true || isAdmin();
+      allow write: if isAdmin();
+    }
+
+    // Pengaturan toko (nama, ongkir, dll)
+    match /settings/{id} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    // Pesanan: dibuat HANYA oleh Cloud Function (Admin SDK).
+    // Admin boleh membaca & mengubah status pengiriman.
+    match /orders/{id} {
+      allow read, update: if isAdmin();
+      allow create, delete: if false;
+    }
+
+    // Daftar admin: user hanya bisa membaca dokumen miliknya sendiri
+    match /admins/{uid} {
+      allow read: if request.auth != null && request.auth.uid == uid;
+      allow write: if false;
+    }
+  }
+}
