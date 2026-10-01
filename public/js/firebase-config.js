@@ -1,11 +1,26 @@
-// Salin dari Firebase Console > Project settings > Your apps > Web app
-export const firebaseConfig = {
-  apiKey: "ISI_API_KEY",
-  authDomain: "ISI_PROJECT_ID.firebaseapp.com",
-  projectId: "ISI_PROJECT_ID",
-  messagingSenderId: "ISI",
-  appId: "ISI"
-};
+<script type="module">
+  // Import the functions you need from the SDKs you need
+  import { initializeApp } from "https://www.gstatic.com/firebasejs/12.19.0/firebase-app.js";
+  import { getAnalytics } from "https://www.gstatic.com/firebasejs/12.19.0/firebase-analytics.js";
+  // TODO: Add SDKs for Firebase products that you want to use
+  // https://firebase.google.com/docs/web/setup#available-libraries
+
+  // Your web app's Firebase configuration
+  // For Firebase JS SDK v7.20.0 and later, measurementId is optional
+  const firebaseConfig = {
+    apiKey: "AIzaSyBtlGcAJrPvW9bUo0UgnzymZ0nEdZ79gcM",
+    authDomain: "frozen-shop.firebaseapp.com",
+    projectId: "frozen-shop",
+    storageBucket: "frozen-shop.firebasestorage.app",
+    messagingSenderId: "378405228910",
+    appId: "1:378405228910:web:260ebf42e60c9477b0717f",
+    measurementId: "G-X6510SVGY5"
+  };
+
+  // Initialize Firebase
+  const app = initializeApp(firebaseConfig);
+  const analytics = getAnalytics(app);
+</script>
 
 // Client Key dari Midtrans Dashboard > Settings > Access Keys
 // (Server Key JANGAN ditaruh di sini — disimpan sebagai Environment Variable di Vercel)
