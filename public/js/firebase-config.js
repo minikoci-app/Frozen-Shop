@@ -31,7 +31,7 @@
 export const API_BASE = '';
 
 export const MIDTRANS = {
-  clientKey: "SB-Mid-client-ISI",
+  clientKey: "Mid-client-8hG8EmOwoIIol1GO",
   production: false // ganti true saat live (dan set env MIDTRANS_PRODUCTION=true di Vercel)
 };
 
