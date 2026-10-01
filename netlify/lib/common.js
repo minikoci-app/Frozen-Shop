@@ -2,6 +2,18 @@
 import admin from 'firebase-admin';
 import crypto from 'node:crypto';
 
+// Merapikan private key dari environment variable. Menoleransi: tanda kutip di sekitar nilai,
+// "\n" berupa teks, baris baru yang berubah jadi spasi, atau semua tertempel dalam satu baris.
+export function normalizePrivateKey(raw) {
+  let k = String(raw || '').trim().replace(/^["']+|["']+$/g, '');
+  k = k.replace(/\\n/g, '\n').replace(/\r/g, '');
+  const m = /-----BEGIN ([A-Z ]+)-----([\s\S]*?)-----END \1-----/.exec(k);
+  if (!m) return k;
+  const body = m[2].replace(/[^A-Za-z0-9+/=]/g, '');
+  const lines = body.match(/.{1,64}/g) || [];
+  return `-----BEGIN ${m[1]}-----\n${lines.join('\n')}\n-----END ${m[1]}-----\n`;
+}
+
 if (!admin.apps.length) {
   // Cara 1 (disarankan di Netlify, batas env var kecil): 3 variabel terpisah.
   // Cara 2: satu variabel FIREBASE_SERVICE_ACCOUNT berisi seluruh JSON.
@@ -12,7 +24,15 @@ if (!admin.apps.length) {
         client_email: process.env.FIREBASE_CLIENT_EMAIL,
         private_key: process.env.FIREBASE_PRIVATE_KEY,
       };
-  if (sa.private_key) sa.private_key = sa.private_key.replace(/\\n/g, '\n');
+  sa.private_key = normalizePrivateKey(sa.private_key);
+  try {
+    crypto.createPrivateKey(sa.private_key);
+  } catch (e) {
+    throw new Error(
+      'FIREBASE_PRIVATE_KEY tidak valid. Salin ulang nilai "private_key" dari file JSON service account: ' +
+      'harus diawali -----BEGIN PRIVATE KEY----- dan diakhiri -----END PRIVATE KEY-----, tanpa tanda kutip.'
+    );
+  }
   admin.initializeApp({ credential: admin.credential.cert(sa) });
 }
 export const db = admin.firestore();
