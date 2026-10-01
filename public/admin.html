@@ -64,14 +64,43 @@ dialog::backdrop{background:rgba(15,42,51,.55)}
 </style>
 </head>
 <body>
+<script>
+/* Penampil error: jika halaman putih, pesan penyebabnya tampil di layar */
+(function () {
+  var locked = false;
+  function show(msg) {
+    var d = document.getElementById('bootErr');
+    if (!d) {
+      d = document.createElement('div'); d.id = 'bootErr';
+      d.style.cssText = 'margin:16px;padding:14px;border:2px solid #d62839;border-radius:12px;background:#fde1e4;color:#7a0e1a;font:14px/1.5 system-ui,sans-serif;white-space:pre-wrap;word-break:break-word';
+      (document.body || document.documentElement).insertBefore(d, (document.body || document.documentElement).firstChild);
+    }
+    d.textContent = 'Halaman gagal dimuat:\n' + msg;
+  }
+  window.__showBootError = function (msg) { locked = true; show(msg); };
+  window.addEventListener('error', function (e) {
+    if (locked) return;
+    var t = e.target;
+    if (t && t !== window && t.tagName && t.tagName !== 'SCRIPT') return; // abaikan gambar/font yang gagal
+    var file = e.filename || (t && t.src) || '';
+    var msg = (e.message || 'File gagal dimuat') + (file ? '\n' + file + (e.lineno ? ':' + e.lineno : '') : '');
+    if (/firebase-config/.test(file)) msg += '\n\nKemungkinan ada salah ketik di public/js/firebase-config.js (kurang koma atau tanda kutip). Periksa lagi barisnya.';
+    show(msg);
+  }, true);
+  window.addEventListener('unhandledrejection', function (e) {
+    if (locked) return;
+    show(String((e.reason && e.reason.message) || e.reason));
+  });
+})();
+</script>
 
 <!-- Login -->
-<div id="loginView" class="login" hidden>
+<div id="loginView" class="login">
   <h1>Admin toko</h1>
   <label>Email<input class="in" id="email" type="email" autocomplete="username"></label>
   <label>Kata sandi<input class="in" id="pass" type="password" autocomplete="current-password"></label>
   <button class="btn red" id="loginBtn">Masuk</button>
-  <div class="err" id="loginErr"></div>
+  <div class="err" id="loginErr">Memeriksa login…</div>
 </div>
 
 <!-- App -->
@@ -178,6 +207,10 @@ import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.12.2/fireba
 import { getAuth, signInWithEmailAndPassword, signOut, onAuthStateChanged } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js';
 import { getFirestore, collection, doc, getDoc, setDoc, addDoc, updateDoc, deleteDoc, onSnapshot, query, orderBy, limit, serverTimestamp } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js';
 import { firebaseConfig, API_BASE } from './js/firebase-config.js';
+if (/ISI/.test(JSON.stringify(firebaseConfig))) {
+  window.__showBootError('File public/js/firebase-config.js belum diisi (masih berisi kata ISI). Isi config Firebase dari Project settings, lalu commit.');
+  throw new Error('firebase-config belum diisi');
+}
 const IMG = (u) => (u && u.startsWith('/') ? API_BASE + u : u || '');
 
 const app = initializeApp(firebaseConfig);
@@ -203,22 +236,46 @@ let tt; const toast = (m) => { const t = $('#toast'); t.textContent = m; t.hidde
 
 /* ---------- auth ---------- */
 let unsubs = [];
+const INIT_MSG = 'Memeriksa login…';
+let authResolved = false;
+setTimeout(() => {
+  if (!authResolved) $('#loginErr').textContent = 'Belum tersambung ke Firebase. Periksa koneksi internet, lalu muat ulang halaman. Jika tetap begini, cek apiKey di public/js/firebase-config.js.';
+}, 6000);
+
 onAuthStateChanged(auth, async (user) => {
+  authResolved = true;
+  if ($('#loginErr').textContent === INIT_MSG || /^Belum tersambung/.test($('#loginErr').textContent)) $('#loginErr').textContent = '';
   unsubs.forEach((u) => u()); unsubs = [];
   if (!user) { $('#appView').hidden = true; $('#loginView').hidden = false; return; }
-  let isAdmin = false;
-  try { isAdmin = (await getDoc(doc(db, 'admins', user.uid))).exists(); } catch {}
+  let isAdmin = false, readErr = null;
+  try { isAdmin = (await getDoc(doc(db, 'admins', user.uid))).exists(); } catch (e) { readErr = e.code || e.message; }
   if (!isAdmin) {
-    $('#loginErr').innerHTML = `Akun ini belum terdaftar sebagai admin.<br>Buat dokumen <b>admins/${esc(user.uid)}</b> di Firestore Console, lalu masuk lagi.`;
+    $('#loginErr').innerHTML = readErr
+      ? `Tidak bisa membaca Firestore (${esc(readErr)}). Pastikan database sudah dibuat dan Rules sudah di-Publish.<br>UID akun ini: <b>${esc(user.uid)}</b>`
+      : `Akun ini belum terdaftar sebagai admin.<br>Buat dokumen <b>admins/${esc(user.uid)}</b> di Firestore Console, lalu masuk lagi.`;
     await signOut(auth); $('#loginView').hidden = false; $('#appView').hidden = true; return;
   }
   $('#loginView').hidden = true; $('#appView').hidden = false;
   start();
 });
+
+const AUTH_MSG = {
+  'auth/invalid-credential': 'Email atau kata sandi salah.',
+  'auth/wrong-password': 'Email atau kata sandi salah.',
+  'auth/user-not-found': 'Email atau kata sandi salah.',
+  'auth/invalid-email': 'Format email tidak valid.',
+  'auth/too-many-requests': 'Terlalu banyak percobaan. Tunggu beberapa menit lalu coba lagi.',
+  'auth/operation-not-allowed': 'Login Email/Password belum diaktifkan. Buka Firebase → Authentication → Sign-in method → Email/Password → Enable.',
+  'auth/configuration-not-found': 'Firebase Authentication belum diaktifkan. Buka Firebase → Authentication → Get started.',
+  'auth/unauthorized-domain': 'Domain ini belum diizinkan. Tambahkan di Firebase → Authentication → Settings → Authorized domains.',
+  'auth/network-request-failed': 'Tidak ada koneksi ke Firebase. Periksa internet.',
+  'auth/invalid-api-key': 'apiKey Firebase salah. Periksa public/js/firebase-config.js.',
+  'auth/api-key-not-valid.-please-pass-a-valid-api-key.': 'apiKey Firebase salah. Periksa public/js/firebase-config.js.',
+};
 $('#loginBtn').onclick = async () => {
   $('#loginErr').textContent = '';
   try { await signInWithEmailAndPassword(auth, $('#email').value.trim(), $('#pass').value); }
-  catch { $('#loginErr').textContent = 'Email atau kata sandi salah.'; }
+  catch (e) { $('#loginErr').textContent = AUTH_MSG[e.code] || ('Gagal masuk: ' + (e.code || e.message)); }
 };
 $('#pass').addEventListener('keydown', (e) => e.key === 'Enter' && $('#loginBtn').click());
 $('#logoutBtn').onclick = () => signOut(auth);
